@@ -20,7 +20,98 @@ vtk.vtkObject.GlobalWarningDisplayOff()
 
 
 #by default : 
-threshold = 0.2 #m 
+threshold = 0.15 #m 
+
+
+
+
+##############################
+# CSV pre-processing : 
+##############################
+
+
+
+# compute the cavitation state theta from the stress field and basal velocity in the dataset :
+def compute_cavitation(data_c,K_wi_c): 
+
+    m=3
+    rho_i = 920  # m3/kg
+    g = 9.81  # m/s2
+    H=230 # m (from Gagliardini, it's the height of the ice slab )
+    
+    tau_b_chosen = np.abs(data_c['stress vector_0']*1e6).mean() # from Mpa to Pa
+    U_b_chosen = (data_c['velocity_0']/365.25/86400).mean()     # from m/a to m/s
+    
+    tau_b_0_pow_m_list = []
+    U_b_0_list = []
+    
+    zero_overburden_ratio_K_wi_list = np.arange(0,1,1) # overburden pressure ratio settings for which there is no cavitation, 
+                                                     # here we consider this True for ovb_ratio = 0 only
+    for K_wi in zero_overburden_ratio_K_wi_list :
+        K_wi_tmp = str(K_wi)
+        if len(K_wi_tmp) ==1 :
+            K_wi_tmp = '0'+ K_wi_tmp
+        tmp_filename = 'sinus3dnS_1_14_'+K_wi_tmp+'_0065__t0002'
+        tmp_path_name='../../data/sinus3dnS_1_14_0065/'+tmp_filename+'.csv'
+        tmp_data=pd.read_csv(tmp_path_name)
+        tau_b_0_pow_m_list.append(pow(np.abs(tmp_data['stress vector_0']*1e6).mean(),m))
+        U_b_0_list.append((tmp_data['velocity_0']/365.25/86400).mean())
+
+    # when there is no cavitation we can infer A_s :
+    A_s = (np.array(U_b_0_list)/np.array(tau_b_0_pow_m_list)).mean() # we consider cavitation = 0. 
+    
+    print(f'The found A_s is : {A_s:.4e} m s⁻¹ Pa^(-m)')
+    
+    if int(K_wi_c) in zero_overburden_ratio_K_wi_list :
+        cavitation_chosen = 0
+    else :
+        cavitation_chosen = 1 - (tau_b_chosen**m * A_s/U_b_chosen)
+
+
+    N_norm_chosen = (1-int(K_wi_c)/100)*H*rho_i*g # N = Pi - Pw   <=>   N = Pi (1 - K_wi_c ) 
+
+    # get all the K_pi/pw
+    known_overburden_ratio_K_wi_list = np.arange(0,81,1)  # overburden pressure ratio settings for which there is a water discharge/path.
+    
+    cavitation_list = []
+    N_norm_list = []
+    tau_b_list  = []
+    U_b_list    = []
+    h_list      = []
+    
+    for K_wi in known_overburden_ratio_K_wi_list :
+        K_wi_tmp = str(K_wi)
+        if len(K_wi_tmp) ==1 :
+            K_wi_tmp  = '0'+ K_wi_tmp
+        tmp_filename  = 'sinus3dnS_1_14_'+K_wi_tmp+'_0065__t0002'
+        tmp_path_name = '../../data/sinus3dnS_1_14_0065/'+tmp_filename+'.csv'
+        tmp_data = pd.read_csv(tmp_path_name)
+        tau_b = np.abs(tmp_data['stress vector_0']*1e6).mean()
+        U_b   = (tmp_data['velocity_0']/365.25/86400).mean()
+        U_b_list.append(U_b)
+        tau_b_list.append(tau_b)
+        N_norm = (1-int(K_wi_tmp)/100)*rho_i*g*H
+        N_norm_list.append(N_norm)
+    
+        h_list.append(tmp_data.hcavity.mean())
+        
+        cavitation = 1 - (tau_b**m * A_s/U_b) # as defined in (1) Gilbert & al 2022
+        cavitation_list.append(cavitation)
+
+
+    plt.plot(known_overburden_ratio_K_wi_list,cavitation_list,'o-',label='from stress (eq1)')
+    plt.axvline(int(K_wi_c),linestyle='--', label=f'overburden ratio : {K_wi_c}')
+    plt.axhline(cavitation_list[int(K_wi_c)],linestyle='--', label=f'cavitation : {cavitation_list[int(K_wi_c)]:.2f}')
+
+    plt.xlabel(r'$K_{Pw/Pi}$')
+    plt.ylabel(r'taux de cavitation $\theta$')
+    plt.ylim(0.0,1.1)
+    plt.legend()
+
+    dic_values = {'h': h_list, 'N_norm': N_norm_list, 'tau_b': tau_b_list, 'U_b': U_b_list } # store all the spatial mean variables for all the K_wi
+
+    return cavitation_chosen, cavitation_list, dic_values, tau_b_chosen, A_s
+
 
 
 
@@ -552,6 +643,8 @@ def get_snappy_paint_buckets(ds,b_coords=None, choose_1_body=False):
         plt.scatter(x_coord,y_coord,color='m',marker='x')
     plt.show()
 
+    # Print the formatted block ready to be copy/pasted : 
+
     print(f'coords are : {box_coords}\n')
     print("\nCopy this block into your blockMeshDict:\n")
     print("vertices")
@@ -575,7 +668,7 @@ def get_snappy_paint_buckets(ds,b_coords=None, choose_1_body=False):
     print(');')
     print("-------------------------------------------------\n")
 
-    # Print the formatted block ready to be copy/pasted
+    
     print("\nCopy this block into your snappyHexMeshDict:\n")
     print("locationsInMesh")
     print("(")
@@ -1230,7 +1323,7 @@ def get_plane_from_interface(ds_2d_p, constriction_interface):
 def fill_concave_wireframe(wireframe_slice):
     """
     Uses VTK's contour triangulator to fill a 1D loop with a solid 2D surface.
-    Unlike Delaunay, this perfectly respects concave boundaries.
+    (Unlike Delaunay, this respects concave boundaries.)
     """
     triangulator = vtk.vtkContourTriangulator()
     triangulator.SetInputData(wireframe_slice)
