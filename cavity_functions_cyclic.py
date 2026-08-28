@@ -99,12 +99,14 @@ def compute_cavitation(data_c,K_wi_c):
         cavitation_list.append(cavitation)
 
 
-    plt.plot(known_overburden_ratio_K_wi_list,cavitation_list,'o-',label='from stress (eq1)')
+    plt.plot(known_overburden_ratio_K_wi_list,cavitation_list,'o-',label='from (eq 7)')
     plt.axvline(int(K_wi_c),linestyle='--', label=f'overburden ratio : {K_wi_c}')
     plt.axhline(cavitation_list[int(K_wi_c)],linestyle='--', label=f'cavitation : {cavitation_list[int(K_wi_c)]:.2f}')
 
-    plt.xlabel(r'$K_{Pw/Pi}$')
-    plt.ylabel(r'taux de cavitation $\theta$')
+    plt.xlabel(r'$K_{Pw/Pi}$',fontsize=16)
+    plt.ylabel(r'taux de cavitation $\theta$',fontsize=16)
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
     plt.ylim(0.0,1.1)
     plt.legend()
 
