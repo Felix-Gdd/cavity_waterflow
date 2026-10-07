@@ -1,5 +1,6 @@
 name: fluid_sim
 channels:
+  - conda-forge
   - defaults
 dependencies:
   - xarray
